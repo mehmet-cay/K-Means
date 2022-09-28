@@ -1,0 +1,125 @@
+---
+title: "K-Means"
+author: "Mehmet ÇAY"
+date: "2022-09-23"
+output: 
+  html_document: 
+    toc: yes
+    highlight: zenburn
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## K-Means
+
+For information, check [here](https://www.javatpoint.com/k-means-clustering-algorithm-in-machine-learning).
+
+```{r}
+library(cluster)
+library(factoextra)
+library(caret)
+
+wholesale <- read.csv("C:/Users/Mehmet ÇAY/Desktop/R/K-Means/K-Means/Wholesale_customers_data.csv")
+
+
+scaleModel<- preProcess(wholesale , method=c("center" , "scale"))
+
+
+modelData <- predict(scaleModel , wholesale)
+View(modelData)
+
+library(mice)
+md.pattern(modelData)
+
+
+```
+
+Create Model
+```{r}
+
+clusterModel <- kmeans(modelData , centers = 4 , iter.max = 15 , nstart = 15 )
+clusterModel
+
+fittedCluster <- fitted(clusterModel)
+View(fittedCluster)
+
+
+clusterModel$cluster
+
+```
+
+Evaluating sets
+
+```{r}
+
+library(tidyverse)
+
+
+reversedData <- modelData %>% select(one_of(scaleModel$mean %>% names)) %>%
+                    map2_df(scaleModel$std , function(sd , var){var * sd}) %>%
+                    map2_df(scaleModel$mean , function(mu , var){var + mu})
+View(reversedData)
+
+
+reversedData$cluster <- clusterModel$cluster
+
+reversedData %>% group_by(cluster) %>% summarise_all(mean)
+
+```
+
+Detecting Optimum K
+
+```{r}
+# Elbow Optimum K 
+
+wss <- sapply(2:10 , FUN = function(x){kmeans(modelData , 
+                                       centers = x , nstart = 10 , 
+                                       iter.max = 15)$tot.withinss
+                                })
+wss
+
+
+plot(2:10 , wss , type = "b")
+fviz_nbclust(modelData , kmeans , method = "wss")
+
+# Silhouette Optimum K 
+
+silhouette(clusterModel$cluster , dist(modelData))
+
+
+silScore <- function(x){
+          model <- kmeans(modelData , centers = x , nstart = 10 , iter.max = 15)
+          sil <- silhouette(model$cluster , dist(modelData))[,3]
+          score <- mean(sil)
+          return(score)
+}
+
+scores <- sapply(2:10 , FUN = silScore)
+
+plot(2:10 , scores , type = "b")
+fviz_nbclust(modelData , kmeans , method = "silhouette")
+
+```
+
+Recreate model with optimum k
+
+```{r}
+
+
+clusterModelK2 <- kmeans(modelData , centers = 2 , nstart = 50 , iter.max = 20)
+clusterModelK3 <- kmeans(modelData , centers = 3 , nstart = 50 , iter.max = 20)
+
+
+fviz_cluster(clusterModelK2 , modelData)
+fviz_cluster(clusterModelK3 , modelData)
+
+reversedData$clusterK2 <- clusterModelK2$cluster
+reversedData$clusterK3 <- clusterModelK3$cluster
+
+reversedData %>% group_by(clusterK2) %>% summarise_all(mean)
+reversedData %>% group_by(clusterK3) %>% summarise_all(mean)
+
+```
+
